@@ -76,6 +76,8 @@ func Convert(d string, ws io.WriteSeeker) error {
 		c = &mixtral{}
 	case "GemmaForCausalLM":
 		c = &gemma{}
+	case "Phi3ForCausalLM":
+		c = &phi3{}
 	default:
 		return errors.New("unsupported architecture")
 	}
