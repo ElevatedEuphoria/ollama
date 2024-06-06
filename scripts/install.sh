@@ -82,23 +82,33 @@ trap install_success EXIT
 
 # Everything from this point onwards is optional.
 
+
+
+configure_openrc() {
+
+    status "Creating ollama openrc service..."
+    cat <<EOF | $SUDO tee /etc/init.d/ollama >/dev/null
+#!/sbin/openrc-run
+
+name="Ollama Service"
+command="/usr/local/bin/ollama serve"
+command_user="ollama"
+command_group="ollama"
+pidfile="/var/run/ollama.pid"
+command_background="yes"
+start_stop_daemon_args="--background --make-pidfile"
+depend() {
+    use network-online
+
+  }
+
+EOF
+    rc-update add ollama default
+    rc-service ollama start
+
+}
+
 configure_systemd() {
-    if ! id ollama >/dev/null 2>&1; then
-        status "Creating ollama user..."
-        $SUDO useradd -r -s /bin/false -U -m -d /usr/share/ollama ollama
-    fi
-    if getent group render >/dev/null 2>&1; then
-        status "Adding ollama user to render group..."
-        $SUDO usermod -a -G render ollama
-    fi
-    if getent group video >/dev/null 2>&1; then
-        status "Adding ollama user to video group..."
-        $SUDO usermod -a -G video ollama
-    fi
-
-    status "Adding current user to ollama group..."
-    $SUDO usermod -a -G ollama $(whoami)
-
     status "Creating ollama systemd service..."
     cat <<EOF | $SUDO tee /etc/systemd/system/ollama.service >/dev/null
 [Unit]
@@ -127,11 +137,49 @@ EOF
             trap start_service EXIT
             ;;
     esac
-}
 
 if available systemctl; then
     configure_systemd
 fi
+
+}
+
+check_init() {
+
+	# Check if the which init system is present
+  if [ -d "/etc/systemd/" ]; then
+    configure_systemd
+    echo "Systemd Init System detected"
+    prerequisites_before_init_service_creation
+  fi
+  
+  if [ -d "/etc/init.d/" ]; then
+    echo "Openrc Init System detected"
+    configure_openrc
+    prerequisites_before_init_service_creation
+  fi
+}    
+prerequisites_before_init_service_creation() {
+    if ! id ollama >/dev/null 2>&1; then
+        status "Creating ollama user..."
+        $SUDO useradd -r -s /bin/false -U -m -d /usr/share/ollama ollama
+    fi
+    if getent group render >/dev/null 2>&1; then
+        status "Adding ollama user to render group..."
+        $SUDO usermod -a -G render ollama
+    fi
+    if getent group video >/dev/null 2>&1; then
+        status "Adding ollama user to video group..."
+        $SUDO usermod -a -G video ollama
+    fi
+
+    status "Adding current user to ollama group..."
+    $SUDO usermod -a -G ollama $(whoami)
+
+}
+
+
+check_init
 
 # WSL2 only supports GPUs via nvidia passthrough
 # so check for nvidia-smi to determine if GPU is available
@@ -323,4 +371,5 @@ if command -v nvidia-persistenced > /dev/null 2>&1; then
 fi
 
 status "NVIDIA GPU ready."
+
 install_success
